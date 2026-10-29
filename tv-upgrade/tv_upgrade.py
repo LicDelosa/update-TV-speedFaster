@@ -526,20 +526,33 @@ def cmd_upgrade(args: argparse.Namespace) -> int:
         print("На guest Wi-Fi компьютер по кабелю телевизор не увидит.")
         return 1
     chosen = ready
+    interactive = sys.stdin.isatty()
+    assume_yes = args.yes
     if not args.ip:
-        print("\nТелевизоры:")
+        print("\nТелевизоры:", flush=True)
         for index, item in enumerate(ready, 1):
-            print(f"  {index}. {describe(item['ip'], [ADB_PORT], item)}")
-        if len(ready) == 1 and args.yes:
-            pick = "1"
+            print(f"  {index}. {describe(item['ip'], [ADB_PORT], item)}", flush=True)
+        if len(ready) == 1:
+            print("Найден один телевизор, выбираю его.", flush=True)
+            chosen = ready
+            if not interactive and not assume_yes:
+                print("Ввод с клавиатуры недоступен, план будет применён сразу.", flush=True)
+                assume_yes = True
+        elif not interactive:
+            print("Телевизоров несколько, а спросить номер нельзя.", flush=True)
+            print("Запустите: python3 tv-upgrade/tv_upgrade.py upgrade --ip АДРЕС --yes", flush=True)
+            return 1
         else:
             pick = ask("Номер телевизора: ")
-        if not pick.isdigit() or not (1 <= int(pick) <= len(ready)):
-            print("Неверный номер.")
-            return 1
-        chosen = [ready[int(pick) - 1]]
+            if not pick.isdigit() or not (1 <= int(pick) <= len(ready)):
+                print("Неверный номер.")
+                return 1
+            chosen = [ready[int(pick) - 1]]
+    elif not interactive and not assume_yes:
+        print("Ввод с клавиатуры недоступен, план будет применён сразу.", flush=True)
+        assume_yes = True
     for item in chosen:
-        upgrade_one(adb, item, args.yes, not args.no_background, args.reboot)
+        upgrade_one(adb, item, assume_yes, not args.no_background, args.reboot)
     return 0
 
 
@@ -581,6 +594,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
     parser = build_parser()
     args = parser.parse_args()
     if not getattr(args, "func", None):
